@@ -7,8 +7,8 @@ from verifier.task import verify_task
 
 
 def test_verify_task_gold():
-    """测试当 Agent 提取出正确数据时，Verifier 是否给出 1.0 满分"""
-    # 模拟成功的 Agent 输出结构 (Gold Standard Case)
+    """Test whether the Verifier assigns a perfect score of 1.0 when the Agent extracts the correct data."""
+    # Output Structure of a Successful Agent (Gold Standard Case)
     mock_agent_output = SimpleNamespace(
         companies=[
             SimpleNamespace(
@@ -45,22 +45,22 @@ def test_verify_task_gold():
         total_parsed=5,
     )
 
-    # 运行 Verifier 校验
+    # Run Verifier check
     result = verify_task(
         task_input={}, agent_output=mock_agent_output, workspace_path="."
     )
 
-    # 断言 Verdict 结果
+    # Assertion Verdict Result
     assert result["score"] == 1.0
     assert all(c["ok"] for c in result["constraints"])
 
 
 def test_verify_task_broken():
-    """测试当 Agent 提取错误数据时，Verifier 是否准确捕获失败规则"""
+    """Test whether the Verifier accurately captures failed rules when the Agent extracts incorrect data."""
     mock_broken_output = SimpleNamespace(
         companies=[
             SimpleNamespace(
-                company_name="WrongName",  # 故意给出错误名字
+                company_name="WrongName",  # Intentionally providing an incorrect name
                 batch="WINTER 2026",
                 location="Unknown",
                 website="",
@@ -73,5 +73,5 @@ def test_verify_task_broken():
         task_input={}, agent_output=mock_broken_output, workspace_path="."
     )
 
-    # 断言失败
+    # Assertion failed
     assert result["score"] == 0.0

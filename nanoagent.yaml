@@ -1,11 +1,11 @@
+_: nanoagent.plugin.PluginConfig
 id: vc-yc-extractor
 version: 1.0.0
 runtime: python3.11
-entrypoint: src.plugin.__main__
+entrypoint: src.plugin
 permissions:
   network: false
 tools:
-  - fetch_html
-  - parse_yc_directory
+  - extract_yc_companies
 tasks:
   - yc-scraper

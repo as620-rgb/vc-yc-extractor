@@ -1,11 +1,36 @@
-_ > nanoagent.plugin.PluginConfig:
-  id: vc-yc-extractor
-  version: 1.0.0
-  runtime: python3.11
-  entrypoint: src.plugin
-  permissions:
-    network: false
-  tools:
-    - extract_yc_companies
-  tasks:
-    - yc-scraper
+_ > nanoagent.plugin.v0001.ManifestConfig:
+id: vc-yc-extractor
+name: YC Directory Extractor
+version: 0.1.0
+status: ready
+spec: nanoagent.plugin/v0001
+
+runtime > nanoagent.plugin.v0001.RuntimeConfig:
+  type: mcp_stdio
+  command: [uv, run, --frozen, python, -m, plugin]
+
+permissions > nanoagent.plugin.v0001.PermissionsConfig:
+  network > nanoagent.plugin.v0001.NetworkConfig:
+    hosts: []
+  filesystem > nanoagent.plugin.v0001.FilesystemConfig:
+    write: [workspace]
+
+# One entry per contract.Tool; its input and output classes are contract.TOOLS's.
+tools > dict[contract.Tool, nanoagent.plugin.v0001.ToolConfig]:
+  read_directory:
+    description: Read up to 20 company cards of the bundled YC Startup Directory snapshot (40 cards) from an offset, each with its slug, name, location, tagline and pills
+  pin_matches:
+    description: Pin the answer key, every card of the snapshot the filter keeps, parsed by code
+
+# One entry per contract.Task; its input class is contract.TASKS's.
+tasks > dict[contract.Task, nanoagent.plugin.v0001.TaskConfig]:
+  extract-companies:
+    description: Extract every YC company of the directory snapshot that matches an industry, batch season and year range, as structured records
+    runner: agent
+    tools: [read_directory]
+    reference: pin_matches
+    instructions: |-
+      Read the whole directory: call read_directory with offset 0 and limit 20, then offset 20 and limit 20, and so on until offset reaches the total the calls return (the snapshot holds 40 cards, so two calls).
+      Build one record per card: slug and name as the card shows them; season and year from its first pill (e.g. "Summer 2013" gives Summer and 2013); industry is its second pill and sub_industry its third pill, or "" when the card has no third pill; city is the location's text before its first comma and country the text after its last comma, both trimmed (e.g. "Bengaluru, KA, India" gives Bengaluru and India).
+      Keep a record when all three hold: industry is empty or equals the record's industry ignoring case (the sub_industry never counts); season is any or equals the record's season; year_from <= year <= year_to (both inclusive).
+      Submit the kept records in directory order (by card position) and count, their number. Submit companies [] and count 0 when none match. Copy every value exactly; never add a company that is not on a card.

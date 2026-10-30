@@ -1,87 +1,91 @@
-"""
-YC Company Directory Scraper Verifier (Task 1)
-Validates agent output against local static HTML fixture without LLM.
-"""
+"""extract-companies: the submitted companies against the answer key pinned from the snapshot by code."""
 
-from pathlib import Path
-from typing import Any
+from .checks import constraint, result, verdict
+
+FIRST_YEAR, LAST_YEAR = 2005, 2026
+FIELDS = ("name", "season", "year", "industry", "sub_industry", "city", "country")
 
 
-def verify_task(task_input: Any, agent_output: Any, workspace_path: str) -> dict:
-    """
-    Standard entry function for nanoagent Harness invocations
-    """
-    constraints = []
+def filter_problem(task):
+    if not FIRST_YEAR <= task.year_from <= task.year_to <= LAST_YEAR:
+        return f"years must satisfy {FIRST_YEAR} <= year_from <= year_to <= {LAST_YEAR}"
+    if task.industry != task.industry.strip():
+        return "industry must not start or end with spaces"
+    return None
 
-    # 1. Safety check: Ensure the output structure exists and is of the correct type.
-    has_companies = hasattr(agent_output, "companies") and isinstance(agent_output.companies, list)
-    if not has_companies:
-        return {
-            "score": 0.0,
-            "constraints": [{
-                "id": "shape-check",
-                "ok": False,
-                "message": "agent_output missing 'companies' list field."
-            }]
-        }
 
-    companies = agent_output.companies
+def keeps(task, record):
+    return (
+        (not task.industry or record.industry.casefold() == task.industry.casefold())
+        and (task.season.value == "any" or record.season.value == task.season.value)
+        and task.year_from <= record.year <= task.year_to
+    )
 
-    # ---- Constraint 1: Determination based on the number of companies ----
-    ok_count = len(companies) >= 5 and len(companies) == getattr(agent_output, "total_parsed", len(companies))
-    constraints.append({
-        "id": "count-check",
-        "ok": ok_count,
-        "message": "" if ok_count else f"Expected at least 5 companies, got {len(companies)}"
-    })
 
-    # ---- Constraint 2: Assertion that core fields must not be null ----
-    ok_fields = True
-    for idx, co in enumerate(companies):
-        if not (getattr(co, "company_name", None) and getattr(co, "batch", None)):
-            ok_fields = False
-            break
-            
-    constraints.append({
-        "id": "field-completeness",
-        "ok": ok_fields,
-        "message": "" if ok_fields else "Missing company_name or batch in parsed records"
-    })
-
-    # ---- Constraint 3: Static Fixture – Accuracy Comparison for the First Company (DoorDash) ----
-    ok_doordash = False
-    if len(companies) > 0:
-        first_co = companies[0]
-        name_match = getattr(first_co, "company_name", "") == "DoorDash"
-        batch_match = "2013" in str(getattr(first_co, "batch", ""))
-        location_match = "San Francisco" in str(getattr(first_co, "location", ""))
-        ok_doordash = name_match and batch_match and location_match
-
-    constraints.append({
-        "id": "doordash-exact-match",
-        "ok": ok_doordash,
-        "message": "" if ok_doordash else "DoorDash data mismatch (check name, location, or batch)"
-    })
-
-    # ---- Constraint 4: Accuracy Comparison for the Second Company (Airbnb) Using Static Fixtures ----
-    ok_airbnb = False
-    if len(companies) > 1:
-        second_co = companies[1]
-        name_match = getattr(second_co, "company_name", "") == "Airbnb"
-        batch_match = "2009" in str(getattr(second_co, "batch", ""))
-        ok_airbnb = name_match and batch_match
-
-    constraints.append({
-        "id": "airbnb-exact-match",
-        "ok": ok_airbnb,
-        "message": "" if ok_airbnb else "Airbnb data mismatch (check name or batch)"
-    })
-
-    # Calculate the final score (1.0 if all constraints are met, otherwise 0.0).
-    all_ok = all(c["ok"] for c in constraints)
-    score = 1.0 if all_ok else 0.0
-
+def plain(record):
     return {
-        "score": score,
-        "constraints": constraints
+        "slug": record.slug,
+        "name": record.name,
+        "season": record.season.value,
+        "year": record.year,
+        "industry": record.industry,
+        "sub_industry": record.sub_industry,
+        "city": record.city,
+        "country": record.country,
     }
+
+
+# pin_matches is the reference tool: its own input and output are checked like any tool call.
+def verify_input(value):
+    problem = filter_problem(value)
+    return result(False, problem) if problem else result(True, "input is valid")
+
+
+def verify_output(input_value, output_value, workspace):
+    if output_value.count != len(output_value.companies):
+        return result(False, "count is not the number of companies")
+    wrong = [record.slug for record in output_value.companies if not keeps(input_value, record)]
+    if wrong:
+        return result(False, f"companies outside the filter: {wrong}")
+    return result(True, f"{output_value.count} companies match")
+
+
+def verify_task(arguments, output, reference, workspace):
+    problem = filter_problem(arguments)
+    if problem:
+        return result(False, problem)
+    if reference is None:
+        return result(False, "no answer key was pinned")
+    expected = {record.slug: plain(record) for record in reference.companies}
+    order = [record.slug for record in reference.companies]
+    submitted = [record.slug for record in output.companies]
+    got = {record.slug: plain(record) for record in output.companies}
+
+    duplicates = sorted({slug for slug in submitted if submitted.count(slug) > 1})
+    missing = [slug for slug in order if slug not in got]
+    extra = [slug for slug in submitted if slug not in expected]
+    outside = [record.slug for record in output.companies if not keeps(arguments, record)]
+    wrong = []
+    for slug in order:
+        if slug in got:
+            for field in FIELDS:
+                if got[slug][field] != expected[slug][field]:
+                    wrong.append(f"{slug}.{field}: expected {expected[slug][field]!r}, got {got[slug][field]!r}")
+    in_order = [slug for slug in submitted if slug in expected] == [slug for slug in order if slug in got]
+
+    return verdict([
+        constraint("count", "count equals the number of companies submitted", output.count == len(submitted),
+                   len(submitted), output.count),
+        constraint("no-duplicates", "each company appears once", not duplicates, [], duplicates,
+                   f"submitted more than once: {duplicates}"),
+        constraint("within-filter", "every submitted record satisfies the filter by its own fields", not outside,
+                   [], outside, f"records that do not satisfy the filter: {outside}"),
+        constraint("no-missing", "every matching company is submitted", not missing, [], missing,
+                   f"{len(missing)} matching companies are missing: {missing}"),
+        constraint("no-extra", "no company outside the answer key is submitted", not extra, [], extra,
+                   f"{len(extra)} companies do not match: {extra}"),
+        constraint("fields-exact", "every field equals the card's", not wrong, [], wrong,
+                   f"{len(wrong)} fields differ, first: {wrong[0] if wrong else ''}"),
+        constraint("directory-order", "companies are in directory order", in_order, order, submitted,
+                   "companies are not in directory order"),
+    ])

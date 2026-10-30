@@ -1,0 +1,11 @@
+_ > nanoagent.plugin.v0001.ProductConfig:
+tagline: "Pull clean, structured company records out of the YC Startup Directory"
+summary: "Name an industry, a batch season and a range of years. The agent pages through a saved snapshot of the YC Startup Directory, turns each matching company card into a record (batch season and year, industry, sub-industry, city and country) and submits them in directory order. The check parses the same snapshot by code and compares every company and every field."
+highlights:
+  - "Runs offline on a fixed 40-company snapshot, so every run is reproducible"
+  - "Seven checks: missing, extra, duplicate, out-of-filter, wrong field, count and order"
+  - "Inclusive year bounds and case-insensitive industry matching, spelled out for the agent"
+steps:
+  - "Ask for companies, e.g. Fintech companies from Winter batches between 2015 and 2020"
+  - "The agent reads the directory twenty cards at a time and extracts the matches"
+  - "See the records and the verdict of every check"

@@ -1,23 +1,26 @@
-[project]
-name = "vc-yc-extractor"
-version = "0.1.0"
-dependencies = [
-    "pydantic>=2.0.0",
-    "beautifulsoup4>=4.12.0",
-    "slimconfig",
-]
-
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nanoagent-vc-yc-extractor"
+version = "0.1.0"
+description = "Vc Yc Extractor: a NanoAgent plugin"
+requires-python = ">=3.12"
+dependencies = ["mcp>=1.27,<2", "slimconfig"]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.uv.sources]
+slimconfig = { git = "https://github.com/zeyuyang8/slimconfig", branch = "master" }
+
+[tool.ruff]
+line-length = 120
 
 [tool.pytest.ini_options]
+# contract.py and verifier/ live at the plugin root.
 pythonpath = ["."]
-
-[tool.hatch.build.targets.wheel]
-packages = ["src"]
-
-[dependency-groups]
-dev = [
-    "pytest>=9.1.1",
-]
